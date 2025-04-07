@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <h2>Результаты теста: {{ result.test.title }}</h2>
+                    <p class="text-muted">Пройден {{ result.created_at.strftime('%d.%m.%Y в %H:%M') }}</p>
+                </div>
+                
+                <div class="card mb-4 border-primary">
+                    <div class="card-body text-center">
+                        <h3 class="card-title">Ваш результат</h3>
+                        <div class="display-4 fw-bold text-primary mb-3">{{ result.score }} баллов</div>
+                        <p class="lead">{{ result.result_text }}</p>
+                    </div>
+                </div>
+                
+                <h4 class="mb-3">Ответы на вопросы:</h4>
+                {% for answer in result.answers %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Вопрос {{ loop.index }}</h5>
+                        <p class="card-text">{{ answer.question.text }}</p>
+                        
+                        {% if answer.question.question_type == 'text' %}
+                            <div class="alert alert-light">
+                                <strong>Ваш ответ:</strong>
+                                <p>{{ answer.answer_text }}</p>
+                            </div>
+                        {% elif answer.question.question_type == 'single_choice' %}
+                            <div class="alert alert-light">
+                                <strong>Ваш ответ:</strong>
+                                <p>{{ answer.option.text if answer.option else 'Нет ответа' }}</p>
+                            </div>
+                        {% elif answer.question.question_type == 'multiple_choice' %}
+                            <div class="alert alert-light">
+                                <strong>Ваши ответы:</strong>
+                                <ul>
+                                    {% for opt_answer in result.answers if opt_answer.question_id == answer.question_id and opt_answer.option_id %}
+                                        <li>{{ opt_answer.option.text }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <div class="text-center mt-4">
+                    <a href="{{ url_for('tests') }}" class="btn btn-outline-primary me-2">Вернуться к тестам</a>
+                    {% if is_psychologist() and result.test.user_id == session['user_id'] %}
+                        <a href="{{ url_for('chat', contact_id=result.user_id) }}" class="btn btn-primary">Написать студенту</a>
+                    {% elif is_student() %}
+                        <a href="{{ url_for('chat', contact_id=result.test.user_id) }}" class="btn btn-primary">Обсудить с психологом</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-5">
+                <h2 class="card-title text-center mb-4">Создание теста</h2>
+                <form method="POST" action="{{ url_for('create_test') }}">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Название теста</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Описание теста</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">Создать тест</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
