@@ -149,6 +149,22 @@ class Appointment(db.Model):
     purpose = db.Column(db.Text)
     status = db.Column(db.String(20), default='pending')  # 'pending', 'confirmed', 'cancelled'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+class Meeting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    scheduled_at = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), default='planned')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class MeetingRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    proposed_time = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Создаем таблицы
 with app.app_context():
