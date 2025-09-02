@@ -2,52 +2,85 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10 col-lg-8">
         <div class="card shadow-sm">
             <div class="card-body p-4">
-                <h2 class="card-title text-center mb-4">{{ test.title }}</h2>
-                <p class="text-center mb-4">{{ test.description }}</p>
-                
+                <h2 class="card-title text-center mb-3">{{ test.title }}</h2>
+                {% if test.description %}
+                <p class="text-muted text-center mb-4">{{ test.description }}</p>
+                {% endif %}
+
                 <form method="POST" action="{{ url_for('take_test', test_id=test.id) }}">
+                    
                     {% for question in test.questions %}
-                    <div class="card mb-3">
+                    <div class="card mb-3 border-0 shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title">Вопрос {{ loop.index }}</h5>
                             <p class="card-text">{{ question.text }}</p>
-                            
+
+                            {# --- Текстовый ответ --- #}
                             {% if question.question_type == 'text' %}
-                                <div class="form-group">
-                                    <textarea class="form-control" name="answer_{{ question.id }}" rows="3" required></textarea>
-                                </div>
+                                <textarea class="form-control" name="answer_{{ question.id }}" rows="3" required></textarea>
+
+                            {# --- Один вариант ответа --- #}
                             {% elif question.question_type == 'single_choice' %}
-                                <div class="form-group">
-                                    {% for option in question.options %}
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="radio" name="answer_{{ question.id }}" id="option_{{ option.id }}" value="{{ option.id }}" required>
-                                        <label class="form-check-label" for="option_{{ option.id }}">
-                                            {{ option.text }}
-                                        </label>
-                                    </div>
-                                    {% endfor %}
+                                {% for option in question.options %}
+                                <div class="form-check mb-2">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="answer_{{ question.id }}" 
+                                        id="option_{{ option.id }}" 
+                                        value="{{ option.id }}" 
+                                        required>
+                                    <label class="form-check-label" for="option_{{ option.id }}">
+                                        {{ option.text }}
+                                    </label>
                                 </div>
+                                {% endfor %}
+
+                            {# --- Шкаловый вопрос --- #}
+                            {% elif question.question_type == 'scale_choice' %}
+                                {% for option in question.options %}
+                                <div class="form-check mb-2">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="answer_{{ question.id }}" 
+                                        id="scale_{{ option.id }}" 
+                                        value="{{ option.id }}" 
+                                        required>
+                                    <label class="form-check-label" for="scale_{{ option.id }}">
+                                        {{ option.text }} 
+                                        <span class="text-muted"></span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+
+                            {# --- Несколько вариантов ответа --- #}
                             {% elif question.question_type == 'multiple_choice' %}
-                                <div class="form-group">
-                                    {% for option in question.options %}
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="answer_{{ question.id }}" id="option_{{ option.id }}" value="{{ option.id }}">
-                                        <label class="form-check-label" for="option_{{ option.id }}">
-                                            {{ option.text }}
-                                        </label>
-                                    </div>
-                                    {% endfor %}
+                                {% for option in question.options %}
+                                <div class="form-check mb-2">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="checkbox" 
+                                        name="answer_{{ question.id }}" 
+                                        id="multi_{{ option.id }}" 
+                                        value="{{ option.id }}">
+                                    <label class="form-check-label" for="multi_{{ option.id }}">
+                                        {{ option.text }}
+                                    </label>
                                 </div>
+                                {% endfor %}
                             {% endif %}
                         </div>
                     </div>
                     {% endfor %}
-                    
+
                     <div class="text-center mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg px-5">Завершить тест</button>
+                        <button type="submit" class="btn btn-primary btn-lg px-5">
+                            Завершить тест
+                        </button>
                     </div>
                 </form>
             </div>
