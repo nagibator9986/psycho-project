@@ -3,19 +3,23 @@ import io
 import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
-from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import func
-from sqlalchemy.schema import UniqueConstraint
+from sqlalchemy import func, and_
+
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.pagesizes import letter
-from sqlalchemy import and_
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
+# используем общий db и готовые модели
+from extensions import db
+from models import (
+    User, Group, Post, Comment, Test, Question, QuestionOption, TestResult,
+    TestInterpretation, TestAnswer, Message, Article, StudentReport,
+    Appointment, Meeting, MeetingRequest, MeetingProtocol
+)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -24,220 +28,33 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['REPORT_FOLDER'] = 'static/reports'
 
-db = SQLAlchemy(app)
-
-# =========================
-#          MODELS
-# =========================
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'student' | 'psychologist'
-    full_name = db.Column(db.String(100))
-    bio = db.Column(db.Text)
-    profile_pic = db.Column(db.String(100))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'))
-    comments = db.relationship('Comment', backref='author', lazy=True)
-    tests = db.relationship('Test', backref='creator', lazy=True)
-    test_results = db.relationship('TestResult', backref='user', lazy=True)
-    messages_sent = db.relationship('Message', foreign_keys='Message.sender_id', backref='sender', lazy=True)
-    messages_received = db.relationship('Message', foreign_keys='Message.recipient_id', backref='recipient', lazy=True)
-    reports = db.relationship('StudentReport', foreign_keys='StudentReport.student_id', backref='student', lazy=True)
-    appointments = db.relationship('Appointment', foreign_keys='Appointment.student_id', backref='student', lazy=True)
-    psychologist_appointments = db.relationship('Appointment', foreign_keys='Appointment.psychologist_id', backref='psychologist', lazy=True)
-    meeting_protocols = db.relationship('MeetingProtocol', foreign_keys='MeetingProtocol.student_id', backref='student', lazy=True)
-    psychologist_protocols = db.relationship('MeetingProtocol', foreign_keys='MeetingProtocol.psychologist_id', backref='psychologist', lazy=True)
-class Group(db.Model):
-    __tablename__ = 'groups'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    course = db.Column(db.Integer, nullable=False, default=1)
-
-    users = db.relationship('User', backref='group', lazy=True)
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    comments = db.relationship('Comment', backref='post', lazy=True, cascade='all, delete-orphan')
-    author = db.relationship('User', backref='posts', lazy=True)
-
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.Text, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_anonymous = db.Column(db.Boolean, default=False)
-
-class Test(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_active = db.Column(db.Boolean, default=True)
-
-    questions = db.relationship('Question', backref='test', lazy=True, cascade='all, delete-orphan')
-    results = db.relationship('TestResult', backref='test', lazy=True, cascade='all, delete-orphan')
-    interpretations = db.relationship('TestInterpretation', backref='test', lazy=True, cascade='all, delete-orphan')
-    interpretations = db.relationship(
-        'TestInterpretation',
-        backref='test',
-        lazy=True,
-        cascade='all, delete-orphan',
-        order_by='TestInterpretation.min_score'
-    )
-
-class Question(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    text = db.Column(db.Text, nullable=False)
-    test_id = db.Column(db.Integer, db.ForeignKey('test.id'), nullable=False)
-    question_type = db.Column(db.String(20), nullable=False)  # text | single_choice | multiple_choice | scale_choice
-
-    options = db.relationship('QuestionOption', backref='question', lazy=True, cascade='all, delete-orphan')
-
-
-class QuestionOption(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    text = db.Column(db.String(200), nullable=False)
-    question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
-    score = db.Column(db.Integer)  # может быть None для текстовых
-
-class TestResult(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    test_id = db.Column(db.Integer, db.ForeignKey('test.id'), nullable=False)
-    score = db.Column(db.Integer)
-    result_text = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    answers = db.relationship('TestAnswer', backref='test_result', lazy=True, cascade='all, delete-orphan')
-
-class TestInterpretation(db.Model):
-    __tablename__ = 'test_interpretation'
-    id = db.Column(db.Integer, primary_key=True)
-    test_id = db.Column(db.Integer, db.ForeignKey('test.id'), nullable=False, index=True)
-    min_score = db.Column(db.Integer, nullable=False)
-    max_score = db.Column(db.Integer, nullable=False)
-    text = db.Column(db.Text, nullable=False)
-
-    
-
-class TestAnswer(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    test_result_id = db.Column(db.Integer, db.ForeignKey('test_result.id'), nullable=False)
-    question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
-    answer_text = db.Column(db.Text)
-    option_id = db.Column(db.Integer, db.ForeignKey('question_option.id'))
-
-    option = db.relationship('QuestionOption')
-    question = db.relationship('Question', backref='answers')
-
-class Message(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.Text, nullable=False)
-    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    recipient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    is_anonymous = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_read = db.Column(db.Boolean, default=False)
-
-class Article(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    image_url = db.Column(db.String(200))
-    user = db.relationship('User', backref='authored_articles', lazy=True)
-
-class StudentReport(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    academic_performance = db.Column(db.Text)
-    emotional_state = db.Column(db.Text)
-    social_interaction = db.Column(db.Text)
-    stress_level = db.Column(db.Text)
-    sleep_quality = db.Column(db.Text)
-    motivation = db.Column(db.Text)
-    behavior_patterns = db.Column(db.Text)
-    recommendations = db.Column(db.Text)
-    additional_notes = db.Column(db.Text)
-    pdf_filename = db.Column(db.String(100))
-
-class Appointment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    appointment_date = db.Column(db.DateTime, nullable=False)
-    purpose = db.Column(db.Text)
-    status = db.Column(db.String(20), default='pending')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        UniqueConstraint('student_id', 'psychologist_id', 'appointment_date', name='uq_appointment_unique_slot'),
-    )
-
-class Meeting(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    scheduled_at = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.String(20), default='planned')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    protocols = db.relationship('MeetingProtocol', backref='meeting', lazy=True, cascade='all, delete-orphan')
-    student = db.relationship('User', foreign_keys=[student_id], backref='student_meetings', lazy='joined')
-    psychologist = db.relationship('User', foreign_keys=[psychologist_id], backref='psychologist_meetings', lazy='joined')
-
-    __table_args__ = (
-        UniqueConstraint('student_id', 'psychologist_id', 'scheduled_at', name='uq_meeting_unique_slot'),
-    )
-
-class MeetingRequest(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    proposed_time = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.String(20), default='pending')
-    message = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class MeetingProtocol(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    meeting_id = db.Column(db.Integer, db.ForeignKey('meeting.id'), nullable=False)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    session_date = db.Column(db.DateTime, nullable=False)
-    duration = db.Column(db.Integer)  # minutes
-    topics_discussed = db.Column(db.Text)
-    emotional_state = db.Column(db.Text)
-    progress_notes = db.Column(db.Text)
-    recommendations = db.Column(db.Text)
-    homework = db.Column(db.Text)
-    additional_comments = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    pdf_filename = db.Column(db.String(100))
-
-# =========================
-#     DB INIT (NO SEEDS)
-# =========================
+# инициализация БД
+db.init_app(app)
 with app.app_context():
     db.create_all()
+
+# подключаем админ-панель (admin.py НЕ импортирует main.py)
+from admin import admin_bp
+app.register_blueprint(admin_bp)
 
 # =========================
 #       HELPERS
 # =========================
+def ensure_group(name: str, course: int | None = None):
+    """Вернёт существующую группу по имени или создаст новую.
+       Если курс передан и отличается — обновит курс у группы."""
+    if not name:
+        return None
+    g = Group.query.filter_by(name=name).first()
+    if not g:
+        g = Group(name=name, course=course or 1)
+        db.session.add(g)
+        db.session.flush()
+    else:
+        if course and g.course != course:
+            g.course = course
+            db.session.flush()
+    return g
 
 def is_psychologist():
     return 'user_id' in session and User.query.get(session['user_id']).role == 'psychologist'
@@ -325,7 +142,7 @@ def generate_protocol_pdf(protocol):
     psychologist = User.query.get(protocol.psychologist_id)
     psychologist_name = psychologist.full_name if psychologist and psychologist.full_name else "Неизвестный психолог"
 
-    session_date_str = protocol.session_date.strftime('%d.%m.%Y %H:%M') if protocol.session_date else "Дата не указана"
+    session_date_str = protocol.session_date.strftime('%d.%m.%Y %H:%М') if protocol.session_date else "Дата не указана"
 
     data = [
         ["Параметр", "Описание"],
@@ -370,33 +187,57 @@ def index():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form['role']
-        full_name = request.form.get('full_name', '')
+        username = (request.form.get('username') or '').strip()
+        email    = (request.form.get('email') or '').strip().lower()
+        password = (request.form.get('password') or '').strip()
+        full_name = (request.form.get('full_name') or '').strip()
+        group_name = (request.form.get('group') or '').strip()
+        course_raw = (request.form.get('course') or '').strip()
 
-        if User.query.filter_by(username=username).first():
-            flash('Это имя пользователя уже занято', 'danger')
+        # Валидация
+        if not username or not email or not password or not full_name or not group_name or not course_raw:
+            flash('Заполните все обязательные поля: ИИН/username, email, пароль, ФИО, группа, курс', 'danger')
             return redirect(url_for('register'))
 
+        # Курс -> int
+        try:
+            course = int(float(course_raw))
+            if course <= 0:
+                raise ValueError
+        except Exception:
+            flash('Курс должен быть положительным числом', 'danger')
+            return redirect(url_for('register'))
+
+        # Проверка уникальности
+        if User.query.filter_by(username=username).first():
+            flash('Это имя пользователя (ИИН) уже занято', 'danger')
+            return redirect(url_for('register'))
         if User.query.filter_by(email=email).first():
             flash('Этот email уже используется', 'danger')
             return redirect(url_for('register'))
 
+        # Группа (создать при необходимости / обновить курс)
+        grp = ensure_group(group_name, course)
+
+        # Роль фиксированно student
         new_user = User(
             username=username,
             email=email,
             password=generate_password_hash(password),
-            role=role,
-            full_name=full_name
+            role='student',
+            full_name=full_name,
+            group_id=grp.id if grp else None
         )
+
         db.session.add(new_user)
         db.session.commit()
 
         flash('Регистрация прошла успешно! Теперь вы можете войти.', 'success')
         return redirect(url_for('login'))
+
+    # GET
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -521,19 +362,17 @@ def add_questions(test_id):
         return redirect(url_for('tests'))
 
     if request.method == 'POST':
-        # 1) УДАЛЕНИЕ ВОПРОСА — обрабатываем ПЕРВЫМ
         if 'delete_question' in request.form:
             q_id = int(request.form['delete_question'])
             q = Question.query.get_or_404(q_id)
             if q.test_id != test.id:
                 flash('Нельзя удалить вопрос из другого теста', 'danger')
             else:
-                db.session.delete(q)  # options удалятся каскадом
+                db.session.delete(q)
                 db.session.commit()
                 flash('Вопрос удалён', 'info')
             return redirect(url_for('add_questions', test_id=test_id))
 
-        # 2) ДОБАВЛЕНИЕ ВОПРОСА
         question_type = request.form.get('question_type')
         if not question_type:
             flash("Не выбран тип вопроса", "danger")
@@ -600,27 +439,22 @@ def delete_test(test_id):
     return redirect(url_for('tests'))
 
 def get_cyr_styles_simple():
-    # Берём TTF из корня проекта
     font_path = os.path.join(app.root_path, "DejaVuSans.ttf")
     pdfmetrics.registerFont(TTFont("DejaVuSans", font_path))
-
     base = getSampleStyleSheet()
     H = ParagraphStyle('H', parent=base['Heading3'], fontName='DejaVuSans')
     T = ParagraphStyle('T', parent=base['Title'],    fontName='DejaVuSans')
     P = ParagraphStyle('P', parent=base['BodyText'], fontName='DejaVuSans')
     return T, H, P
+
 def generate_test_results_pdf(test):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
-
-    # Берём три простых стиля на базе DejaVuSans
     T, H, P = get_cyr_styles_simple()
-
     elements = []
     elements.append(Paragraph(f"Результаты теста: {test.title}", T))
     elements.append(Spacer(1, 12))
 
-    # Грузим данные с группами (как у тебя)
     from sqlalchemy import asc
     rows = (
         db.session.query(
@@ -637,7 +471,6 @@ def generate_test_results_pdf(test):
         .all()
     )
 
-    # Группируем
     grouped = {}
     for full_name, username, score, interp_text, group_name in rows:
         g = group_name or "Без группы"
@@ -648,18 +481,15 @@ def generate_test_results_pdf(test):
             interp_text or "—"
         ))
 
-    # Рисуем по группам
     for gname, items in grouped.items():
         elements.append(Paragraph(f"Группа: {gname}", H))
         elements.append(Spacer(1, 6))
-
         data = [["ФИО", "Логин", "Баллы", "Интерпретация"]]
         for full_name, username, score, interp_text in items:
             data.append([full_name, username, str(score), interp_text])
-
         table = Table(data, colWidths=[170, 120, 60, 230])
         table.setStyle([
-            ('FONTNAME',(0,0),(-1,-1),'DejaVuSans'),  # <<< ВАЖНО
+            ('FONTNAME',(0,0),(-1,-1),'DejaVuSans'),
             ('FONTSIZE',(0,0),(-1,-1),10),
             ('BACKGROUND', (0,0), (-1,0), colors.grey),
             ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),
@@ -674,14 +504,12 @@ def generate_test_results_pdf(test):
     buffer.seek(0)
     return buffer
 
-
 @app.route('/tests/<int:test_id>/download_results')
 def download_test_results(test_id):
     if 'user_id' not in session or not is_psychologist():
         return redirect(url_for('login'))
 
     test = Test.query.get_or_404(test_id)
-
     if test.user_id != session['user_id']:
         flash('У вас нет прав на выгрузку этого теста', 'danger')
         return redirect(url_for('tests'))
@@ -700,7 +528,6 @@ def add_interpretation(test_id):
         flash('Нет прав для изменения этого теста', 'danger')
         return redirect(url_for('tests'))
 
-    # Удаление
     if 'delete_interpretation' in request.form:
         interp = TestInterpretation.query.get_or_404(request.form['delete_interpretation'])
         db.session.delete(interp)
@@ -708,7 +535,6 @@ def add_interpretation(test_id):
         flash('Интерпретация удалена', 'info')
         return redirect(url_for('add_questions', test_id=test_id))
 
-    # Добавление
     min_score = int(request.form['min_score'])
     max_score = int(request.form['max_score'])
     text = request.form['text']
@@ -742,10 +568,9 @@ def take_test(test_id):
             created_at=datetime.utcnow()
         )
         db.session.add(test_result)
-        db.session.flush()  # чтобы test_result.id появился сразу
+        db.session.flush()
 
         total_score = 0
-
         for question in test.questions:
             answer_text = None
             option_id = None
@@ -763,7 +588,7 @@ def take_test(test_id):
                 for opt_id in option_ids:
                     option = QuestionOption.query.get(int(opt_id))
                     total_score += option.score if option else 0
-                option_id = None  # храним по одному ответу в строке
+                option_id = None
 
             db.session.add(TestAnswer(
                 test_result_id=test_result.id,
@@ -772,10 +597,8 @@ def take_test(test_id):
                 option_id=option_id
             ))
 
-        # --- сохраняем баллы ---
         test_result.score = total_score
 
-        # --- ПОДСТАВЛЯЕМ ИНТЕРПРЕТАЦИЮ ИЗ БД ---
         interp = TestInterpretation.query.filter(
             and_(
                 TestInterpretation.test_id == test.id,
@@ -787,7 +610,6 @@ def take_test(test_id):
         if interp:
             test_result.result_text = interp.text
         else:
-            # запасной вариант, если интерпретации не заданы
             if total_score < 20:
                 test_result.result_text = "Низкий уровень. Рекомендуется консультация психолога."
             elif 20 <= total_score < 40:
@@ -934,7 +756,6 @@ def create_appointment(student_id):
         appointment_date = datetime.strptime(request.form['appointment_date'], '%Y-%m-%dT%H:%M')
         purpose = request.form.get('purpose')
 
-        # ПРОВЕРКИ на существование
         exists_a = Appointment.query.filter_by(
             student_id=student_id,
             psychologist_id=session['user_id'],
@@ -1154,7 +975,6 @@ def chat(contact_id):
             student_id = user.id if is_student() else contact.id
             psychologist_id = user.id if is_psychologist() else contact.id
 
-            # ПРОВЕРКИ
             exists_a = Appointment.query.filter_by(
                 student_id=student_id, psychologist_id=psychologist_id, appointment_date=appointment_date
             ).first()
@@ -1184,14 +1004,13 @@ def chat(contact_id):
                 db.session.add(meeting)
 
             message = Message(
-                content=f"Предложена встреча на {appointment_date.strftime('%d.%m.%Y %H:%M')}. Цель: {purpose or 'Не указана'}",
+                content=f"Предложена встреча на {appointment_date.strftime('%d.%м.%Y %H:%M')}. Цель: {purpose or 'Не указана'}",
                 sender_id=user.id,
                 recipient_id=contact.id,
                 is_anonymous=False
             )
             db.session.add(message)
 
-        # пометить входящие как прочитанные
         Message.query.filter_by(sender_id=contact.id, recipient_id=user.id, is_read=False).update({'is_read': True})
         db.session.commit()
         return redirect(url_for('chat', contact_id=contact_id))
@@ -1283,7 +1102,6 @@ def meetings_calendar():
 # =========================
 #        ENTRYPOINT
 # =========================
-
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)

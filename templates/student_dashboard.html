@@ -60,26 +60,6 @@
             </div>
         </div>
 
-        <div class="card mb-4">
-            <div class="card-body">
-                {% if recent_results %}
-                    <div class="list-group">
-                        {% for result in recent_results %}
-                        <a href="{{ url_for('test_result', result_id=result.id) }}" class="list-group-item list-group-item-action">
-                            <div class="d-flex justify-content-between">
-                                <h6 class="mb-1">{{ result.test.title }}</h6>
-                                <small class="text-muted">{{ result.created_at.strftime('%d.%m.%Y') }}</small>
-                            </div>
-                            <p class="mb-1 text-muted">{{ result.result_text|truncate(100) }}</p>
-                            <small>Результат: {{ result.score }} баллов</small>
-                        </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-muted">Вы еще не проходили тесты.</p>
-                    <a href="{{ url_for('tests') }}" class="btn btn-primary">Пройти первый тест</a>
-                {% endif %}
-            </div>
         </div>
     </div>
 </div>
