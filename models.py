@@ -1,21 +1,23 @@
 # models.py
 from datetime import datetime
-from sqlalchemy import func, and_
 from sqlalchemy.schema import UniqueConstraint
-from flask_sqlalchemy import SQLAlchemy
 from extensions import db
 
+# Совпадаем с существующей таблицей user (см. ошибки UNIQUE constraint failed: user.email)
 class User(db.Model):
+    __tablename__ = 'user'
+
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)      # уникальный логин
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)  # СНОВА уникальный email
     password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'student' | 'psychologist' | (добавим admin/superadmin)
+    role = db.Column(db.String(20), nullable=False)  # student | psychologist | admin | superadmin
     full_name = db.Column(db.String(100))
     bio = db.Column(db.Text)
     profile_pic = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     group_id = db.Column(db.Integer, db.ForeignKey('groups.id'))
+
     comments = db.relationship('Comment', backref='author', lazy=True)
     tests = db.relationship('Test', backref='creator', lazy=True)
     test_results = db.relationship('TestResult', backref='user', lazy=True)
@@ -27,6 +29,7 @@ class User(db.Model):
     meeting_protocols = db.relationship('MeetingProtocol', foreign_keys='MeetingProtocol.student_id', backref='student', lazy=True)
     psychologist_protocols = db.relationship('MeetingProtocol', foreign_keys='MeetingProtocol.psychologist_id', backref='psychologist', lazy=True)
 
+
 class Group(db.Model):
     __tablename__ = 'groups'
     id = db.Column(db.Integer, primary_key=True)
@@ -34,7 +37,9 @@ class Group(db.Model):
     course = db.Column(db.Integer, nullable=False, default=1)
     users = db.relationship('User', backref='group', lazy=True)
 
+
 class Post(db.Model):
+    __tablename__ = 'post'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
@@ -44,7 +49,9 @@ class Post(db.Model):
     comments = db.relationship('Comment', backref='post', lazy=True, cascade='all, delete-orphan')
     author = db.relationship('User', backref='posts', lazy=True)
 
+
 class Comment(db.Model):
+    __tablename__ = 'comment'
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -52,7 +59,9 @@ class Comment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_anonymous = db.Column(db.Boolean, default=False)
 
+
 class Test(db.Model):
+    __tablename__ = 'test'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -63,20 +72,26 @@ class Test(db.Model):
     results = db.relationship('TestResult', backref='test', lazy=True, cascade='all, delete-orphan')
     interpretations = db.relationship('TestInterpretation', backref='test', lazy=True, cascade='all, delete-orphan', order_by='TestInterpretation.min_score')
 
+
 class Question(db.Model):
+    __tablename__ = 'question'
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.Text, nullable=False)
     test_id = db.Column(db.Integer, db.ForeignKey('test.id'), nullable=False)
     question_type = db.Column(db.String(20), nullable=False)  # text | single_choice | multiple_choice | scale_choice
     options = db.relationship('QuestionOption', backref='question', lazy=True, cascade='all, delete-orphan')
 
+
 class QuestionOption(db.Model):
+    __tablename__ = 'question_option'
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.String(200), nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
     score = db.Column(db.Integer)
 
+
 class TestResult(db.Model):
+    __tablename__ = 'test_result'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     test_id = db.Column(db.Integer, db.ForeignKey('test.id'), nullable=False)
@@ -84,6 +99,7 @@ class TestResult(db.Model):
     result_text = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     answers = db.relationship('TestAnswer', backref='test_result', lazy=True, cascade='all, delete-orphan')
+
 
 class TestInterpretation(db.Model):
     __tablename__ = 'test_interpretation'
@@ -93,7 +109,9 @@ class TestInterpretation(db.Model):
     max_score = db.Column(db.Integer, nullable=False)
     text = db.Column(db.Text, nullable=False)
 
+
 class TestAnswer(db.Model):
+    __tablename__ = 'test_answer'
     id = db.Column(db.Integer, primary_key=True)
     test_result_id = db.Column(db.Integer, db.ForeignKey('test_result.id'), nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
@@ -102,7 +120,9 @@ class TestAnswer(db.Model):
     option = db.relationship('QuestionOption')
     question = db.relationship('Question', backref='answers')
 
+
 class Message(db.Model):
+    __tablename__ = 'message'
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -111,7 +131,9 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
 
+
 class Article(db.Model):
+    __tablename__ = 'article'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
@@ -120,7 +142,9 @@ class Article(db.Model):
     image_url = db.Column(db.String(200))
     user = db.relationship('User', backref='authored_articles', lazy=True)
 
+
 class StudentReport(db.Model):
+    __tablename__ = 'student_report'
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -136,7 +160,9 @@ class StudentReport(db.Model):
     additional_notes = db.Column(db.Text)
     pdf_filename = db.Column(db.String(100))
 
+
 class Appointment(db.Model):
+    __tablename__ = 'appointment'
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -146,7 +172,9 @@ class Appointment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (UniqueConstraint('student_id', 'psychologist_id', 'appointment_date', name='uq_appointment_unique_slot'),)
 
+
 class Meeting(db.Model):
+    __tablename__ = 'meeting'
     id = db.Column(db.Integer, primary_key=True)
     psychologist_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -158,7 +186,9 @@ class Meeting(db.Model):
     psychologist = db.relationship('User', foreign_keys=[psychologist_id], backref='psychologist_meetings', lazy='joined')
     __table_args__ = (UniqueConstraint('student_id', 'psychologist_id', 'scheduled_at', name='uq_meeting_unique_slot'),)
 
+
 class MeetingRequest(db.Model):
+    __tablename__ = 'meeting_request'
     id = db.Column(db.Integer, primary_key=True)
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -167,7 +197,9 @@ class MeetingRequest(db.Model):
     message = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 class MeetingProtocol(db.Model):
+    __tablename__ = 'meeting_protocol'
     id = db.Column(db.Integer, primary_key=True)
     meeting_id = db.Column(db.Integer, db.ForeignKey('meeting.id'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)

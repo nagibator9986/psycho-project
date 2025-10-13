@@ -7,7 +7,6 @@
       <div class="card-body p-5">
         <h2 class="card-title text-center mb-4">Регистрация</h2>
 
-        {# выводим flash-сообщения #}
         {% with messages = get_flashed_messages(with_categories=True) %}
           {% if messages %}
             <ul class="list-unstyled mb-3">
@@ -22,7 +21,6 @@
           <div class="mb-3">
             <label for="username" class="form-label">ИИН (логин / username)</label>
             <input type="text" class="form-control" id="username" name="username" required>
-            <div class="form-text">Используется как логин. Пример: 070328501542</div>
           </div>
 
           <div class="mb-3">
@@ -40,17 +38,18 @@
             <input type="password" class="form-control" id="password" name="password" required>
           </div>
 
-          <div class="mb-3">
-            <label for="group" class="form-label">Группа</label>
-            <input type="text" class="form-control" id="group" name="group" placeholder="Например: ИС-22" required>
-          </div>
-
           <div class="mb-4">
-            <label for="course" class="form-label">Курс</label>
-            <input type="number" min="1" class="form-control" id="course" name="course" placeholder="Например: 2" required>
+            <label for="group_id" class="form-label">Группа</label>
+            <select class="form-select" id="group_id" name="group_id" required>
+              <option value="" selected disabled>Выберите группу</option>
+              {% for g in groups %}
+                <option value="{{ g.id }}">
+                  {{ g.name }}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Курс подтянется автоматически из выбранной группы.</div>
           </div>
-
-          {# роль больше не выбираем: всегда student (зашито на сервере) #}
 
           <button type="submit" class="btn btn-primary w-100 py-2">Зарегистрироваться</button>
         </form>

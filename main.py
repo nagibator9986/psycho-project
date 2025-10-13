@@ -187,28 +187,18 @@ def index():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = (request.form.get('username') or '').strip()
-        email    = (request.form.get('email') or '').strip().lower()
-        password = (request.form.get('password') or '').strip()
+        username  = (request.form.get('username') or '').strip()
+        email     = (request.form.get('email') or '').strip().lower()
+        password  = (request.form.get('password') or '').strip()
         full_name = (request.form.get('full_name') or '').strip()
-        group_name = (request.form.get('group') or '').strip()
-        course_raw = (request.form.get('course') or '').strip()
+        group_id  = request.form.get('group_id')
 
         # Валидация
-        if not username or not email or not password or not full_name or not group_name or not course_raw:
-            flash('Заполните все обязательные поля: ИИН/username, email, пароль, ФИО, группа, курс', 'danger')
+        if not all([username, email, password, full_name, group_id]):
+            flash('Заполните все поля: ИИН, ФИО, email, пароль и группу', 'danger')
             return redirect(url_for('register'))
 
-        # Курс -> int
-        try:
-            course = int(float(course_raw))
-            if course <= 0:
-                raise ValueError
-        except Exception:
-            flash('Курс должен быть положительным числом', 'danger')
-            return redirect(url_for('register'))
-
-        # Проверка уникальности
+        # Уникальность
         if User.query.filter_by(username=username).first():
             flash('Это имя пользователя (ИИН) уже занято', 'danger')
             return redirect(url_for('register'))
@@ -216,27 +206,44 @@ def register():
             flash('Этот email уже используется', 'danger')
             return redirect(url_for('register'))
 
-        # Группа (создать при необходимости / обновить курс)
-        grp = ensure_group(group_name, course)
+        # Валидируем выбранную группу
+        try:
+            gid = int(group_id)
+        except Exception:
+            flash('Неверная группа', 'danger')
+            return redirect(url_for('register'))
 
-        # Роль фиксированно student
+        grp = Group.query.get(gid)
+        if not grp:
+            flash('Выбранная группа не найдена', 'danger')
+            return redirect(url_for('register'))
+
+        # Создаём пользователя (курс тянется из grp.course — отдельно не спрашиваем)
         new_user = User(
             username=username,
             email=email,
             password=generate_password_hash(password),
             role='student',
             full_name=full_name,
-            group_id=grp.id if grp else None
+            group_id=grp.id
         )
-
         db.session.add(new_user)
         db.session.commit()
 
         flash('Регистрация прошла успешно! Теперь вы можете войти.', 'success')
         return redirect(url_for('login'))
 
-    # GET
-    return render_template('register.html')
+    # GET: отдаём список групп (с их курсами на всякий случай для отображения)
+    all_groups = Group.query.order_by(Group.course.asc(), Group.name.asc()).all()
+    return render_template('register.html', groups=all_groups)
+
+
+    # GET: отрисовка формы с готовыми данными
+    all_groups = Group.query.order_by(Group.course.asc(), Group.name.asc()).all()
+    # курсы берём из БД; если групп нет — показываем 1..4
+    course_set = sorted({g.course for g in all_groups}) or [1, 2, 3, 4]
+    return render_template('register.html', groups=all_groups, courses=course_set)
+
 
 
 @app.route('/login', methods=['GET', 'POST'])
