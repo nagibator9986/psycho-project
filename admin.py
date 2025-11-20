@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import datetime
 from functools import wraps
-
+from flask_login import current_user
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, session, current_app
@@ -74,16 +74,17 @@ def _bootstrap_superadmin_once():
 def superadmin_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        uid = session.get('user_id')
-        if not uid:
+        if not current_user.is_authenticated:
             flash('Нужно войти в систему', 'warning')
             return redirect(url_for('login'))
-        u = User.query.get(uid)
-        if not u or u.role not in ('admin', 'superadmin'):
+
+        if current_user.role not in ('admin', 'superadmin'):
             flash('Доступ запрещён', 'danger')
             return redirect(url_for('index'))
+
         return f(*args, **kwargs)
     return wrapper
+
 
 
 # =========================
